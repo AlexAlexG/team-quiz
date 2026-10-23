@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ-панель ведущего</title>
+    <title>Админ-панель ведущего — Квиз</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Подключаем надежную библиотеку QR-кодов -->
+    <!-- Генератор QR-кодов -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     
     <script type="module">
@@ -25,17 +25,31 @@
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
 
-        // Привязываем функции к window для прямого вызова из HTML
+        // Привязываем методы к window
         window.quizDB = db;
         window.quizRef = { ref, set, get, update, onValue, push, remove };
         
-        // Сигнал готовности базы
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans">
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans flex flex-col justify-center items-center">
 
-    <div class="max-w-3xl mx-auto space-y-6">
+    <!-- ОКНО АВТОРИЗАЦИИ (ПАРОЛЬ 1234) -->
+    <div id="auth-modal" class="w-full max-w-sm bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-4 text-center">
+        <div class="text-4xl mb-2">🔐</div>
+        <h2 class="text-lg font-bold text-white">Вход в Админ-панель</h2>
+        <p class="text-xs text-slate-400">Введите пароль ведущего для доступа к управлению</p>
+        <div>
+            <input type="password" id="admin-pass-input" placeholder="Пароль" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-center text-sm focus:outline-none focus:border-indigo-500 mb-2">
+            <p id="pass-error" class="text-xs text-rose-400 hidden">Неверный пароль!</p>
+        </div>
+        <button onclick="checkAdminPassword()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl transition text-sm shadow-lg">
+            Войти
+        </button>
+    </div>
+
+    <!-- ОСНОВНАЯ ПАНЕЛЬ АДМИНИСТРАТОРА (СКРЫТА ДО ВВОДА ПАРОЛЯ) -->
+    <div id="admin-panel" class="hidden w-full max-w-3xl mx-auto space-y-6">
         <!-- Шапка -->
         <header class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex justify-between items-center shadow-xl">
             <div>
@@ -86,7 +100,7 @@
                                 <option value="3">Вариант 4</option>
                             </select>
                         </div>
-                        <button onclick="addQuestion()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow">
+                        <button type="button" onclick="addQuestion()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow cursor-pointer">
                             + Добавить вопрос
                         </button>
                     </div>
@@ -101,7 +115,7 @@
                 </div>
 
                 <!-- Кнопка запуска -->
-                <button onclick="startQuiz()" id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3.5 rounded-xl transition shadow-lg hidden text-base">
+                <button type="button" onclick="startQuiz()" id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3.5 rounded-xl transition shadow-lg hidden text-base cursor-pointer">
                     🚀 Запустить викторину
                 </button>
             </div>
@@ -115,7 +129,7 @@
                 <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
                     <p id="admin-current-q-text" class="text-base font-semibold text-white"></p>
                 </div>
-                <button onclick="nextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3.5 rounded-xl transition shadow-lg text-sm">
+                <button type="button" onclick="nextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3.5 rounded-xl transition shadow-lg text-sm cursor-pointer">
                     Следующий вопрос / Итог ➡️
                 </button>
             </div>
@@ -135,7 +149,7 @@
             <div class="space-y-1">
                 <p class="text-xs text-slate-400">Прямая ссылка для команд:</p>
                 <div class="text-sm text-emerald-400 font-mono bg-slate-900 p-3 rounded-xl border border-slate-700 break-all select-all font-semibold" id="player-link-display">
-                    Загрузка ссылки...
+                    https://alexalexg.github.io/team-quiz/index.html
                 </div>
             </div>
         </div>
@@ -151,15 +165,40 @@
     </div>
 
     <script>
+        const ADMIN_PASSWORD = "1234";
+        const PLAYER_URL = "https://alexalexg.github.io/team-quiz/index.html";
         let questionsList = [];
 
-        // Ожидаем инициализации Firebase
-        window.addEventListener('firebase-ready', () => {
-            initAdmin();
-            generatePlayerQRCode();
-        });
+        // Проверка сохранённой сессии авторизации
+        window.onload = function() {
+            if (sessionStorage.getItem('admin_authenticated') === 'true') {
+                showAdminPanel();
+            }
+        };
 
-        // Переключение между вкладками
+        function checkAdminPassword() {
+            const input = document.getElementById('admin-pass-input').value;
+            if (input === ADMIN_PASSWORD) {
+                sessionStorage.setItem('admin_authenticated', 'true');
+                showAdminPanel();
+            } else {
+                document.getElementById('pass-error').classList.remove('hidden');
+            }
+        }
+
+        function showAdminPanel() {
+            document.getElementById('auth-modal').classList.add('hidden');
+            const panel = document.getElementById('admin-panel');
+            panel.classList.remove('hidden');
+            document.body.classList.remove('flex', 'justify-center', 'items-center');
+            
+            if (window.quizDB) {
+                initAdmin();
+            } else {
+                window.addEventListener('firebase-ready', initAdmin);
+            }
+        }
+
         function switchTab(tabName) {
             const tabs = ['questions', 'qrcode', 'leaderboard'];
             tabs.forEach(t => {
@@ -173,26 +212,17 @@
                     content.classList.add('hidden');
                 }
             });
+
+            if (tabName === 'qrcode') {
+                renderQRCode();
+            }
         }
 
-        // Вычисление ссылки игрока и генерация QR-кода
-        function generatePlayerQRCode() {
-            let playerUrl = window.location.href.split('?')[0].split('#')[0];
-            
-            // Если открыто как admin.html -> меняем на index.html
-            if (playerUrl.endsWith('admin.html')) {
-                playerUrl = playerUrl.replace('admin.html', 'index.html');
-            } else if (!playerUrl.endsWith('index.html')) {
-                // Если адрес без имени файла (например, https://site.ru/folder/)
-                playerUrl = playerUrl.replace(/\/$/, '') + '/index.html';
-            }
-
-            document.getElementById('player-link-display').innerText = playerUrl;
-
-            // Генерация QR-кода на холсте Canvas
-            if (window.QRCode) {
-                QRCode.toCanvas(document.getElementById('qrcode-canvas'), playerUrl, { width: 200, margin: 1 }, function (error) {
-                    if (error) console.error("Ошибка генерации QR:", error);
+        function renderQRCode() {
+            const canvas = document.getElementById('qrcode-canvas');
+            if (window.QRCode && canvas) {
+                QRCode.toCanvas(canvas, PLAYER_URL, { width: 220, margin: 1 }, function (error) {
+                    if (error) console.error("Ошибка при отрисовке QR-кода:", error);
                 });
             }
         }
@@ -200,7 +230,7 @@
         function initAdmin() {
             const { ref, onValue } = window.quizRef;
             
-            // 1. Слушаем вопросы из Firebase
+            // Загрузка вопросов из Firebase
             onValue(ref(window.quizDB, 'quiz/questions'), (snapshot) => {
                 const data = snapshot.val();
                 questionsList = data ? Object.values(data) : [];
@@ -227,7 +257,7 @@
                 document.getElementById('start-btn').classList.remove('hidden');
             });
 
-            // 2. Слушаем таблицу лидеров
+            // Загрузка команд
             onValue(ref(window.quizDB, 'quiz/teams'), (snapshot) => {
                 const teams = snapshot.val();
                 const lbEl = document.getElementById('admin-leaderboard');
@@ -246,7 +276,7 @@
                 });
             });
 
-            // 3. Слушаем состояние игры
+            // Отслеживание состояния игры
             onValue(ref(window.quizDB, 'quiz/state'), (snapshot) => {
                 const state = snapshot.val() || { status: 'waiting', currentQuestion: 0 };
                 const statusText = document.getElementById('admin-status-text');
@@ -271,8 +301,12 @@
             });
         }
 
-        // Функция добавления вопроса
         window.addQuestion = function() {
+            if (!window.quizDB) {
+                alert("Ошибка: База данных Firebase ещё не подсоединилась! Проверьте ключи.");
+                return;
+            }
+
             const text = document.getElementById('q-text').value.trim();
             const options = [
                 document.getElementById('q-opt1').value.trim(),
@@ -283,7 +317,7 @@
             const correct = parseInt(document.getElementById('q-correct').value);
 
             if (!text || options.some(o => !o)) {
-                alert('Пожалуйста, заполните сам вопрос и все 4 варианта ответов!');
+                alert('Пожалуйста, заполните текст вопроса и все 4 варианта ответа!');
                 return;
             }
 
@@ -291,13 +325,12 @@
             const newQRef = push(ref(window.quizDB, 'quiz/questions'));
             
             set(newQRef, { text, options, correct }).then(() => {
-                // Очистка полей после успешной записи в Firebase
                 document.getElementById('q-text').value = '';
                 document.getElementById('q-opt1').value = '';
                 document.getElementById('q-opt2').value = '';
                 document.getElementById('q-opt3').value = '';
                 document.getElementById('q-opt4').value = '';
-            }).catch(err => alert("Ошибка записи в базу: " + err.message));
+            }).catch(err => alert("Ошибка сохранения в Firebase: " + err.message));
         };
 
         window.startQuiz = function() {
@@ -319,7 +352,7 @@
         };
 
         window.resetGame = function() {
-            if (confirm('Сбросить игру, включая удаление всех вопросов и результатов команд?')) {
+            if (confirm('Сбросить всю игру, вопросы и результаты команд?')) {
                 const { ref, remove } = window.quizRef;
                 remove(ref(window.quizDB, 'quiz')).then(() => location.reload());
             }
