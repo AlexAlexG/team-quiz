@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Интерактивная командная викторина</title>
-    <!-- Подключаем Tailwind CSS для красивого дизайна -->
+    <title>Командная викторина — Игрок</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Подключаем Firebase SDK (v10) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, get, update, onValue, push, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        import { getDatabase, ref, set, get, update, onValue, push } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-        // ЗАМЕНИТЕ ЭТИ НАСТРОЙКИ НА СВОИ ИЗ FIREBASE CONSOLE
+        // ⚠️ ЗАМЕНИТЕ НА ТЕ ЖЕ ДАННЫЕ ИЗ FIREBASE CONSOLE
         const firebaseConfig = {
             apiKey: "AIzaSyCvsRaEbkYxMPySS8-OC7BMJywcTJ4enFs",
   authDomain: "teamquiz-e1717.firebaseapp.com",
@@ -23,289 +21,74 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-
-        // Делаем глобальные функции доступными для интерфейса
         window.db = db;
-        window.dbRef = { ref, set, get, update, onValue, push, remove };
-        
-        // Запуск инициализации приложения после загрузки Firebase
+        window.dbRef = { ref, set, get, update, onValue, push };
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans p-4">
 
-    <!-- Шапка -->
-    <header class="bg-slate-800 border-b border-slate-700 p-4 text-center">
-        <h1 class="text-xl font-bold tracking-wider text-indigo-400">⚡ КВИЗ-ПЛАТФОРМА</h1>
-        <div id="role-indicator" class="text-xs text-slate-400 mt-1">Определяем роль...</div>
+    <header class="text-center py-2">
+        <h1 class="text-lg font-bold tracking-wider text-emerald-400">⚡ КОМАНДНАЯ ВИКТОРИНА</h1>
     </header>
 
-    <!-- Основной контейнер -->
-    <main class="container mx-auto p-4 max-w-2xl flex-grow flex flex-col justify-center">
+    <main class="container mx-auto max-w-md flex-grow flex flex-col justify-center">
 
-        <!-- Выбор роли (если не админ и не игрок) -->
-        <div id="view-selector" class="space-y-4 text-center">
-            <h2 class="text-2xl font-semibold mb-6">Добро пожаловать! Выберите режим:</h2>
-            <div class="flex flex-col sm:flex-row gap-4 justify-center">
-                <button onclick="selectRole('admin')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg">
-                    👨‍💻 Я Ведущий (Админка)
-                </button>
-                <button onclick="selectRole('player')" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-6 rounded-xl transition shadow-lg">
-                    🎮 Я Команда (Игрок)
-                </button>
+        <!-- Регистрация команды -->
+        <div id="player-reg-section" class="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center shadow-xl space-y-4">
+            <h2 class="text-xl font-bold text-white">Вход в игру</h2>
+            <p class="text-xs text-slate-400">Введите название вашей команды. Только один игрок с телефона отправляет ответы.</p>
+            <input type="text" id="team-name-input" placeholder="Например: Эрудит" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-center text-base mb-2 focus:outline-none focus:border-emerald-500">
+            <button onclick="registerTeam()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3.5 rounded-xl transition shadow-lg text-sm">
+                Войти в игру 🎮
+            </button>
+        </div>
+
+        <!-- Ожидание старта -->
+        <div id="player-waiting-section" class="hidden bg-slate-800 p-8 rounded-2xl border border-slate-700 text-center shadow-xl space-y-4">
+            <div class="animate-pulse text-4xl">⏳</div>
+            <h2 class="text-lg font-bold text-slate-200" id="waiting-title">Ожидание начала игры...</h2>
+            <p class="text-xs text-slate-400" id="waiting-subtitle">Ведущий скоро запустит первый вопрос.</p>
+            <div class="mt-4 p-3 bg-slate-900 rounded-xl inline-block text-xs text-slate-300">
+                Команда: <strong id="my-team-display" class="text-emerald-400"></strong><br>
+                Баллов: <strong id="my-score-display" class="text-indigo-400">0</strong>
             </div>
         </div>
 
-        <!-- АДМИН-ПАНЕЛЬ -->
-        <div id="view-admin" class="hidden space-y-6">
-            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl">
-                <h2 class="text-xl font-bold text-indigo-400 mb-4">Панель управления ведущего</h2>
-                
-                <!-- Статус игры -->
-                <div class="mb-4 flex justify-between items-center bg-slate-900 p-3 rounded-lg">
-                    <span>Статус: <strong id="admin-game-status" class="text-yellow-400">Ожидание</strong></span>
-                    <button onclick="resetGame()" class="text-xs bg-red-600/50 hover:bg-red-600 px-3 py-1.5 rounded transition">Сбросить игру</button>
-                </div>
-
-                <!-- Конструктор вопросов -->
-                <div id="admin-setup-section" class="space-y-3 mb-6">
-                    <h3 class="font-semibold text-slate-300">Добавить вопрос</h3>
-                    <input type="text" id="q-text" placeholder="Текст вопроса" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm focus:outline-none focus:border-indigo-500">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input type="text" id="q-opt1" placeholder="Вариант 1" class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
-                        <input type="text" id="q-opt2" placeholder="Вариант 2" class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
-                        <input type="text" id="q-opt3" placeholder="Вариант 3" class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
-                        <input type="text" id="q-opt4" placeholder="Вариант 4" class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
-                    </div>
-                    <div class="flex gap-2 items-center">
-                        <label class="text-sm text-slate-400">Правильный (1-4):</label>
-                        <select id="q-correct" class="bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
-                            <option value="0">Вариант 1</option>
-                            <option value="1">Вариант 2</option>
-                            <option value="2">Вариант 3</option>
-                            <option value="3">Вариант 4</option>
-                        </select>
-                        <button onclick="addQuestion()" class="ml-auto bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm transition">Добавить</button>
-                    </div>
-
-                    <div class="mt-4 pt-4 border-t border-slate-700">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase mb-2">Список вопросов (<span id="q-count">0</span>)</h4>
-                        <div id="admin-questions-list" class="space-y-2 max-h-40 overflow-y-auto text-xs text-slate-300"></div>
-                    </div>
-
-                    <button onclick="startQuiz()" id="start-btn" class="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 font-bold py-3 rounded-xl transition shadow-lg hidden">
-                        🚀 Запустить викторину
-                    </button>
-                </div>
-
-                <!-- Управление активным вопросом -->
-                <div id="admin-control-section" class="hidden space-y-4">
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                        <h3 class="text-sm text-slate-400 mb-1">Текущий вопрос: <span id="current-q-index" class="text-white font-bold">1</span></h3>
-                        <p id="admin-current-q-text" class="text-lg font-semibold mb-3"></p>
-                        <div class="flex gap-3">
-                            <button onclick="nextQuestion()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 font-bold py-2.5 rounded-lg transition text-sm">
-                                Следующий вопрос / Итог ➡️
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Таблица лидеров в реальном времени -->
-                <div class="mt-6">
-                    <h3 class="font-semibold text-slate-300 mb-2">Таблица команд (баллы)</h3>
-                    <div id="admin-leaderboard" class="space-y-2 bg-slate-900 p-3 rounded-xl border border-slate-700 max-h-60 overflow-y-auto">
-                        <span class="text-xs text-slate-500">Пока никто не зарегистрировался...</span>
-                    </div>
-                </div>
+        <!-- Экран вопроса -->
+        <div id="player-question-section" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
+            <div class="flex justify-between items-center text-xs text-slate-400">
+                <span>Вопрос <span id="p-q-num">1</span></span>
+                <span id="timer-display" class="bg-red-500/20 text-red-400 px-2.5 py-1 rounded-lg font-bold">⏱ 30 сек</span>
             </div>
-        </div>
-
-        <!-- ИГРОВАЯ ПАНЕЛЬ КОМАНДЫ -->
-        <div id="view-player" class="hidden space-y-6">
-            <!-- Регистрация команды -->
-            <div id="player-reg-section" class="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center shadow-xl">
-                <h2 class="text-xl font-bold text-emerald-400 mb-2">Вход команды</h2>
-                <p class="text-sm text-slate-400 mb-4">Введите название вашей команды для участия</p>
-                <input type="text" id="team-name-input" placeholder="Например: Эрудит" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-center text-lg mb-4 focus:outline-none focus:border-emerald-500">
-                <button onclick="registerTeam()" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3 rounded-xl transition shadow-lg">
-                    Войти в игру
-                </button>
-            </div>
-
-            <!-- Ожидание старта / следующего вопроса -->
-            <div id="player-waiting-section" class="hidden bg-slate-800 p-8 rounded-2xl border border-slate-700 text-center shadow-xl space-y-4">
-                <div class="animate-pulse text-4xl">⏳</div>
-                <h2 class="text-xl font-bold text-slate-200" id="waiting-title">Ожидание начала игры...</h2>
-                <p class="text-sm text-slate-400" id="waiting-subtitle">Следите за экраном ведущего</p>
-                <div class="mt-4 p-3 bg-slate-900 rounded-xl inline-block">
-                    Команда: <strong id="my-team-display" class="text-emerald-400"></strong> | Баланс баллов: <strong id="my-score-display" class="text-indigo-400">0</strong>
-                </div>
-            </div>
-
-            <!-- Экран ответа на вопрос -->
-            <div id="player-question-section" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
-                <div class="flex justify-between items-center text-xs text-slate-400">
-                    <span>Вопрос <span id="p-q-num">1</span></span>
-                    <span id="timer-display" class="bg-red-500/20 text-red-400 px-2 py-1 rounded font-bold">⏱ 30 сек</span>
-                </div>
-                <h3 id="p-q-text" class="text-xl font-bold text-white text-center py-2"></h3>
-                
-                <div id="p-options-grid" class="grid grid-cols-1 gap-3">
-                    <!-- Кнопки вариантов генерируются динамически -->
-                </div>
+            <h3 id="p-q-text" class="text-lg font-bold text-white text-center py-2"></h3>
+            
+            <div id="p-options-grid" class="grid grid-cols-1 gap-3">
+                <!-- Варианты ответов -->
             </div>
         </div>
 
     </main>
 
-    <!-- Подвал -->
-    <footer class="text-center p-4 text-xs text-slate-500 border-t border-slate-800">
-        Система синхронизирована через Firebase Cloud
+    <footer class="text-center py-3 text-xs text-slate-500">
+        Удачной игры!
     </footer>
 
-    <!-- Логика приложения -->
     <script>
-        let currentUserRole = null; // 'admin' или 'player'
         let myTeamName = null;
         let questionsList = [];
         let currentTimer = null;
         let answeredCurrent = false;
 
         window.addEventListener('firebase-ready', () => {
-            initSync();
-        });
-
-        function selectRole(role) {
-            currentUserRole = role;
-            document.getElementById('view-selector').classList.add('hidden');
-            if (role === 'admin') {
-                document.getElementById('view-admin').classList.remove('hidden');
-                document.getElementById('role-indicator').innerText = 'Режим: Ведущий';
-                loadAdminData();
-            } else {
-                document.getElementById('view-player').classList.remove('hidden');
-                document.getElementById('role-indicator').innerText = 'Режим: Игрок';
-            }
-        }
-
-        // --- АДМИН ФУНКЦИИ ---
-        function loadAdminData() {
+            // Загружаем список вопросов заранее
             const { ref, onValue } = window.dbRef;
-            
-            // Слушаем вопросы
             onValue(ref(window.db, 'quiz/questions'), (snapshot) => {
                 const data = snapshot.val();
                 questionsList = data ? Object.values(data) : [];
-                document.getElementById('q-count').innerText = questionsList.length;
-                
-                const listEl = document.getElementById('admin-questions-list');
-                listEl.innerHTML = '';
-                questionsList.forEach((q, idx) => {
-                    listEl.innerHTML += `<div class="p-2 bg-slate-900 rounded border border-slate-800"><b>${idx+1}.</b> ${q.text}</div>`;
-                });
-
-                if (questionsList.length > 0) {
-                    document.getElementById('start-btn').classList.remove('hidden');
-                } else {
-                    document.getElementById('start-btn').classList.add('hidden');
-                }
             });
+        });
 
-            // Слушаем состояние команд и лидеров
-            onValue(ref(window.db, 'quiz/teams'), (snapshot) => {
-                const teams = snapshot.val();
-                const lbEl = document.getElementById('admin-leaderboard');
-                lbEl.innerHTML = '';
-                if (!teams) {
-                    lbEl.innerHTML = '<span class="text-xs text-slate-500">Пока никто не зарегистрировался...</span>';
-                    return;
-                }
-                
-                // Сортировка по баллам
-                const sorted = Object.entries(teams).sort((a,b) => b[1].score - a[1].score);
-                sorted.forEach(([name, data], idx) => {
-                    lbEl.innerHTML += `
-                        <div class="flex justify-between items-center bg-slate-800 p-2 rounded text-sm">
-                            <span>#${idx+1} <b>${name}</b></span>
-                            <span class="text-indigo-400 font-bold">${data.score} балл(ов)</span>
-                        </div>`;
-                });
-            });
-
-            // Статус игры
-            onValue(ref(window.db, 'quiz/state'), (snapshot) => {
-                const state = snapshot.val() || { status: 'waiting', currentQuestion: 0 };
-                document.getElementById('admin-game-status').innerText = state.status === 'playing' ? 'Идет игра (Вопрос ' + (state.currentQuestion + 1) + ')' : (state.status === 'finished' ? 'Игра завершена' : 'Ожидание');
-                
-                if (state.status === 'playing') {
-                    document.getElementById('admin-setup-section').classList.add('hidden');
-                    document.getElementById('admin-control-section').classList.remove('hidden');
-                    if (questionsList[state.currentQuestion]) {
-                        document.getElementById('current-q-index').innerText = state.currentQuestion + 1;
-                        document.getElementById('admin-current-q-text').innerText = questionsList[state.currentQuestion].text;
-                    }
-                } else if (state.status === 'finished') {
-                    document.getElementById('admin-current-q-text').innerText = "🏆 Викторина завершена! Победители определены в таблице лидеров.";
-                }
-            });
-        }
-
-        function addQuestion() {
-            const text = document.getElementById('q-text').value.trim();
-            const options = [
-                document.getElementById('q-opt1').value.trim(),
-                document.getElementById('q-opt2').value.trim(),
-                document.getElementById('q-opt3').value.trim(),
-                document.getElementById('q-opt4').value.trim()
-            ];
-            const correct = parseInt(document.getElementById('q-correct').value);
-
-            if (!text || options.some(o => !o)) {
-                alert('Заполните текст вопроса и все 4 варианта!');
-                return;
-            }
-
-            const { ref, push, set } = window.dbRef;
-            const newQRef = push(ref(window.db, 'quiz/questions'));
-            set(newQRef, { text, options, correct });
-
-            // Очистка полей
-            document.getElementById('q-text').value = '';
-            document.getElementById('q-opt1').value = '';
-            document.getElementById('q-opt2').value = '';
-            document.getElementById('q-opt3').value = '';
-            document.getElementById('q-opt4').value = '';
-        }
-
-        function startQuiz() {
-            const { ref, set } = window.dbRef;
-            set(ref(window.db, 'quiz/state'), { status: 'playing', currentQuestion: 0, startTime: Date.now() });
-        }
-
-        function nextQuestion() {
-            const { ref, get, set } = window.dbRef;
-            get(ref(window.db, 'quiz/state')).then((snapshot) => {
-                const state = snapshot.val();
-                const nextIdx = state.currentQuestion + 1;
-                if (nextIdx < questionsList.length) {
-                    set(ref(window.db, 'quiz/state'), { status: 'playing', currentQuestion: nextIdx, startTime: Date.now() });
-                } else {
-                    set(ref(window.db, 'quiz/state'), { status: 'finished', currentQuestion: state.currentQuestion });
-                }
-            });
-        }
-
-        function resetGame() {
-            if (confirm('Сбросить все вопросы, команды и начать сначала?')) {
-                const { ref, remove } = window.dbRef;
-                remove(ref(window.db, 'quiz')).then(() => {
-                    location.reload();
-                });
-            }
-        }
-
-        // --- ИГРОВЫЕ ФУНКЦИИ ---
         function registerTeam() {
             const name = document.getElementById('team-name-input').value.trim();
             if (!name) {
@@ -316,14 +99,9 @@
             const { ref, set, get } = window.dbRef;
             
             get(ref(window.db, 'quiz/teams/' + name)).then((snapshot) => {
-                if (snapshot.exists()) {
-                    // Если команда уже была, просто подключаем
+                set(ref(window.db, 'quiz/teams/' + name), { score: snapshot.exists() ? snapshot.val().score : 0 }).then(() => {
                     initPlayerGame();
-                } else {
-                    set(ref(window.db, 'quiz/teams/' + name), { score: 0 }).then(() => {
-                        initPlayerGame();
-                    });
-                }
+                });
             });
         }
 
@@ -334,24 +112,16 @@
 
             const { ref, onValue } = window.dbRef;
 
-            // Загружаем список вопросов для игрока
-            onValue(ref(window.db, 'quiz/questions'), (snapshot) => {
-                const data = snapshot.val();
-                questionsList = data ? Object.values(data) : [];
-            });
-
-            // Слушаем баллы команды
             onValue(ref(window.db, 'quiz/teams/' + myTeamName + '/score'), (snapshot) => {
                 document.getElementById('my-score-display').innerText = snapshot.val() || 0;
             });
 
-            // Слушаем глобальное состояние игры
             onValue(ref(window.db, 'quiz/state'), (snapshot) => {
                 const state = snapshot.val();
                 if (!state) return;
 
                 if (state.status === 'waiting') {
-                    showWaitingScreen("Ожидание начала игры...", "Ведущий скоро запустит викторину.");
+                    showWaitingScreen("Ожидание начала игры...", "Ведущий скоро начнет.");
                 } else if (state.status === 'playing') {
                     renderActiveQuestion(state.currentQuestion);
                 } else if (state.status === 'finished') {
@@ -385,11 +155,10 @@
                 const btn = document.createElement('button');
                 btn.className = "w-full bg-slate-900 hover:bg-indigo-600/40 border border-slate-700 p-4 rounded-xl text-left font-medium transition text-sm";
                 btn.innerText = opt;
-                btn.onclick = () => submitAnswer(idx, q.correct, qIndex);
+                btn.onclick = () => submitAnswer(idx, q.correct);
                 grid.appendChild(btn);
             });
 
-            // Запуск таймера на 30 секунд
             startPlayerTimer(30);
         }
 
@@ -404,14 +173,12 @@
                 timerEl.innerText = `⏱ ${timeLeft} сек`;
                 if (timeLeft <= 0) {
                     clearInterval(currentTimer);
-                    if (!answeredCurrent) {
-                        lockAnswers("Время вышло!");
-                    }
+                    if (!answeredCurrent) lockAnswers("Время вышло!");
                 }
             }, 1000);
         }
 
-        function submitAnswer(selectedIndex, correctIndex, qIndex) {
+        function submitAnswer(selectedIndex, correctIndex) {
             if (answeredCurrent) return;
             answeredCurrent = true;
             if (currentTimer) clearInterval(currentTimer);
@@ -419,17 +186,14 @@
             const buttons = document.getElementById('p-options-grid').children;
             for (let b of buttons) b.disabled = true;
 
-            // Подсветка выбора
             if (selectedIndex === correctIndex) {
                 buttons[selectedIndex].classList.remove('bg-slate-900');
                 buttons[selectedIndex].classList.add('bg-emerald-600', 'text-white');
                 
-                // Начисляем балл в Firebase
                 const { ref, get, set } = window.dbRef;
                 const scoreRef = ref(window.db, 'quiz/teams/' + myTeamName + '/score');
                 get(scoreRef).then((snapshot) => {
-                    const currentScore = snapshot.val() || 0;
-                    set(scoreRef, currentScore + 1);
+                    set(scoreRef, (snapshot.val() || 0) + 1);
                 });
             } else {
                 buttons[selectedIndex].classList.remove('bg-slate-900');
@@ -442,11 +206,7 @@
 
         function lockAnswers(message) {
             const grid = document.getElementById('p-options-grid');
-            grid.innerHTML = `<div class="text-center p-6 text-indigo-300 font-semibold bg-slate-900 rounded-xl">${message}</div>`;
-        }
-
-        function initSync() {
-            // Базовая проверка связи
+            grid.innerHTML = `<div class="text-center p-6 text-indigo-300 font-semibold bg-slate-900 rounded-xl text-sm">${message}</div>`;
         }
     </script>
 </body>
