@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Админ-панель ведущего — Квиз</title>
+    <title>Админ-панель ведущего</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Библиотека для генерации QR-кода -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Подключаем надежную библиотеку QR-кодов -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getDatabase, ref, set, get, update, onValue, push, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
@@ -23,190 +24,255 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getDatabase(app);
-        window.db = db;
-        window.dbRef = { ref, set, get, update, onValue, push, remove };
+
+        // Привязываем функции к window для прямого вызова из HTML
+        window.quizDB = db;
+        window.quizRef = { ref, set, get, update, onValue, push, remove };
+        
+        // Сигнал готовности базы
         window.dispatchEvent(new Event('firebase-ready'));
     </script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 font-sans">
 
-    <div class="max-w-4xl mx-auto space-y-6">
+    <div class="max-w-3xl mx-auto space-y-6">
         <!-- Шапка -->
         <header class="bg-slate-800 p-4 rounded-2xl border border-slate-700 flex justify-between items-center shadow-xl">
             <div>
                 <h1 class="text-xl font-bold text-indigo-400">👨‍💻 Админ-панель ведущего</h1>
-                <p class="text-xs text-slate-400">Управление викториной и подключением команд</p>
+                <p class="text-xs text-slate-400" id="admin-status-text">Статус: Ожидание</p>
             </div>
             <button onclick="resetGame()" class="bg-red-600/30 hover:bg-red-600 text-red-200 hover:text-white px-3 py-1.5 rounded-lg text-xs transition border border-red-500/50">
                 🔄 Сбросить всю игру
             </button>
         </header>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <!-- Левая колонка: Вопросы и Старт -->
-            <div class="md:col-span-2 space-y-6">
-                <!-- Конструктор вопросов -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
-                    <h2 class="font-bold text-lg text-slate-200">Добавить вопрос (<span id="q-count">0</span>)</h2>
+        <!-- Меню переключения вкладок -->
+        <nav class="grid grid-cols-3 gap-2 bg-slate-800 p-1.5 rounded-2xl border border-slate-700">
+            <button id="tab-btn-questions" onclick="switchTab('questions')" class="py-2.5 px-4 rounded-xl text-sm font-bold transition bg-indigo-600 text-white shadow">
+                📝 Вопросы (<span id="q-count">0</span>)
+            </button>
+            <button id="tab-btn-qrcode" onclick="switchTab('qrcode')" class="py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-400 hover:text-white">
+                📱 QR-код
+            </button>
+            <button id="tab-btn-leaderboard" onclick="switchTab('leaderboard')" class="py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-400 hover:text-white">
+                🏆 Таблица лидеров
+            </button>
+        </nav>
+
+        <!-- ВКЛАДКА 1: ВОПРОСЫ И УПРАВЛЕНИЕ -->
+        <div id="tab-content-questions" class="space-y-6">
+            <!-- Конструктор -->
+            <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
+                <h2 class="font-bold text-base text-slate-200">Добавить новый вопрос</h2>
+                
+                <div class="space-y-3">
+                    <input type="text" id="q-text" placeholder="Введите текст вопроса..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-500">
                     
-                    <div class="space-y-3">
-                        <input type="text" id="q-text" placeholder="Текст вопроса" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm focus:outline-none focus:border-indigo-500">
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            <input type="text" id="q-opt1" placeholder="Вариант 1" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm">
-                            <input type="text" id="q-opt2" placeholder="Вариант 2" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm">
-                            <input type="text" id="q-opt3" placeholder="Вариант 3" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm">
-                            <input type="text" id="q-opt4" placeholder="Вариант 4" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm">
-                        </div>
-                        <div class="flex gap-2 items-center justify-between">
-                            <div class="flex items-center gap-2">
-                                <label class="text-sm text-slate-400">Правильный:</label>
-                                <select id="q-correct" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm">
-                                    <option value="0">Вариант 1</option>
-                                    <option value="1">Вариант 2</option>
-                                    <option value="2">Вариант 3</option>
-                                    <option value="3">Вариант 4</option>
-                                </select>
-                            </div>
-                            <button onclick="addQuestion()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow">
-                                + Добавить в базу
-                            </button>
-                        </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" id="q-opt1" placeholder="Вариант 1" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm focus:outline-none focus:border-indigo-500">
+                        <input type="text" id="q-opt2" placeholder="Вариант 2" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm focus:outline-none focus:border-indigo-500">
+                        <input type="text" id="q-opt3" placeholder="Вариант 3" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm focus:outline-none focus:border-indigo-500">
+                        <input type="text" id="q-opt4" placeholder="Вариант 4" class="bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-sm focus:outline-none focus:border-indigo-500">
                     </div>
 
-                    <!-- Список добавленных вопросов -->
-                    <div class="pt-4 border-t border-slate-700">
-                        <h3 class="text-xs font-bold text-slate-400 uppercase mb-2">Созданные вопросы:</h3>
-                        <div id="admin-questions-list" class="space-y-2 max-h-48 overflow-y-auto text-xs text-slate-300 pr-1">
-                            <span class="text-slate-500">Пока нет вопросов...</span>
+                    <div class="flex flex-wrap gap-3 items-center justify-between pt-2">
+                        <div class="flex items-center gap-2">
+                            <label class="text-xs text-slate-400">Правильный ответ:</label>
+                            <select id="q-correct" class="bg-slate-900 border border-slate-700 rounded-xl p-2 text-sm focus:outline-none">
+                                <option value="0">Вариант 1</option>
+                                <option value="1">Вариант 2</option>
+                                <option value="2">Вариант 3</option>
+                                <option value="3">Вариант 4</option>
+                            </select>
                         </div>
+                        <button onclick="addQuestion()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold transition shadow">
+                            + Добавить вопрос
+                        </button>
                     </div>
-
-                    <!-- Кнопка старта -->
-                    <button onclick="startQuiz()" id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3.5 rounded-xl transition shadow-lg hidden text-base">
-                        🚀 Запустить викторину для всех команд
-                    </button>
                 </div>
 
-                <!-- Активное управление игрой (появляется при старте) -->
-                <div id="admin-control-section" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm text-slate-400">Статус: <strong id="admin-game-status" class="text-yellow-400">Идет игра</strong></span>
-                        <span class="text-sm bg-indigo-950 text-indigo-300 px-3 py-1 rounded-full font-bold">Вопрос <span id="current-q-index">1</span></span>
+                <!-- Список добавленных вопросов -->
+                <div class="pt-4 border-t border-slate-700">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase mb-2">Созданный пул вопросов:</h3>
+                    <div id="admin-questions-list" class="space-y-2 max-h-52 overflow-y-auto text-xs text-slate-300 pr-1">
+                        <span class="text-slate-500">Вопросы пока не добавлены...</span>
                     </div>
-                    <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                        <p id="admin-current-q-text" class="text-lg font-semibold text-white mb-2"></p>
-                    </div>
-                    <button onclick="nextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3.5 rounded-xl transition shadow-lg text-sm">
-                        Следующий вопрос / Завершить ➡️
-                    </button>
+                </div>
+
+                <!-- Кнопка запуска -->
+                <button onclick="startQuiz()" id="start-btn" class="w-full bg-emerald-600 hover:bg-emerald-500 font-bold py-3.5 rounded-xl transition shadow-lg hidden text-base">
+                    🚀 Запустить викторину
+                </button>
+            </div>
+
+            <!-- Управление запущенной игрой -->
+            <div id="admin-control-section" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-bold text-emerald-400">🔥 Идет игра в реальном времени</span>
+                    <span class="text-xs bg-indigo-950 text-indigo-300 px-3 py-1 rounded-full font-bold">Вопрос №<span id="current-q-index">1</span></span>
+                </div>
+                <div class="bg-slate-900 p-4 rounded-xl border border-slate-700">
+                    <p id="admin-current-q-text" class="text-base font-semibold text-white"></p>
+                </div>
+                <button onclick="nextQuestion()" class="w-full bg-indigo-600 hover:bg-indigo-500 font-bold py-3.5 rounded-xl transition shadow-lg text-sm">
+                    Следующий вопрос / Итог ➡️
+                </button>
+            </div>
+        </div>
+
+        <!-- ВКЛАДКА 2: QR КОД ДЛЯ КОМАНД -->
+        <div id="tab-content-qrcode" class="hidden bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl text-center space-y-4">
+            <h2 class="font-bold text-lg text-slate-200">Подключение игроков</h2>
+            <p class="text-xs text-slate-400">Покажите этот QR-код участникам для входа в викторину:</p>
+            
+            <div class="flex justify-center my-4">
+                <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block">
+                    <canvas id="qrcode-canvas"></canvas>
                 </div>
             </div>
 
-            <!-- Правая колонка: QR-код для игроков и Таблица лидеров -->
-            <div class="space-y-6">
-                <!-- QR Код -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl text-center space-y-3">
-                    <h2 class="font-bold text-slate-200 text-sm">QR-код для команд</h2>
-                    <p class="text-xs text-slate-400">Дайте участникам отсканировать его:</p>
-                    <div id="qrcode" class="bg-white p-3 rounded-xl inline-block flex justify-center"></div>
-                    <div class="text-xs text-indigo-400 break-all select-all font-mono bg-slate-900 p-2 rounded border border-slate-700" id="player-link-display"></div>
-                </div>
-
-                <!-- Таблица лидеров -->
-                <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-3">
-                    <h2 class="font-bold text-slate-200 text-sm">Таблица лидеров</h2>
-                    <div id="admin-leaderboard" class="space-y-2 bg-slate-900 p-3 rounded-xl border border-slate-700 max-h-64 overflow-y-auto">
-                        <span class="text-xs text-slate-500">Ожидание команд...</span>
-                    </div>
+            <div class="space-y-1">
+                <p class="text-xs text-slate-400">Прямая ссылка для команд:</p>
+                <div class="text-sm text-emerald-400 font-mono bg-slate-900 p-3 rounded-xl border border-slate-700 break-all select-all font-semibold" id="player-link-display">
+                    Загрузка ссылки...
                 </div>
             </div>
         </div>
+
+        <!-- ВКЛАДКА 3: ТАБЛИЦА ЛИДЕРОВ -->
+        <div id="tab-content-leaderboard" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
+            <h2 class="font-bold text-lg text-slate-200">Текущий рейтинг команд</h2>
+            <div id="admin-leaderboard" class="space-y-2 bg-slate-900 p-4 rounded-xl border border-slate-700 max-h-96 overflow-y-auto">
+                <span class="text-xs text-slate-500">Ожидание подключенных команд...</span>
+            </div>
+        </div>
+
     </div>
 
     <script>
         let questionsList = [];
 
+        // Ожидаем инициализации Firebase
         window.addEventListener('firebase-ready', () => {
             initAdmin();
-            generateQRCode();
+            generatePlayerQRCode();
         });
 
-        function generateQRCode() {
-            // Автоматически вычисляем ссылку на player.html на базе текущего адреса admin.html
-            const currentUrl = window.location.href;
-            const playerUrl = currentUrl.replace('admin.html', 'index.html');
-            document.getElementById('player-link-display').innerText = playerUrl;
-            
-            document.getElementById("qrcode").innerHTML = "";
-            new QRCode(document.getElementById("qrcode"), {
-                text: playerUrl,
-                width: 140,
-                height: 140,
-                colorDark: "#0f172a",
-                colorLight: "#ffffff",
-                correctLevel: QRCode.CorrectLevel.H
+        // Переключение между вкладками
+        function switchTab(tabName) {
+            const tabs = ['questions', 'qrcode', 'leaderboard'];
+            tabs.forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                const content = document.getElementById(`tab-content-${t}`);
+                if (t === tabName) {
+                    btn.className = "py-2.5 px-4 rounded-xl text-sm font-bold transition bg-indigo-600 text-white shadow";
+                    content.classList.remove('hidden');
+                } else {
+                    btn.className = "py-2.5 px-4 rounded-xl text-sm font-bold transition text-slate-400 hover:text-white";
+                    content.classList.add('hidden');
+                }
             });
         }
 
-        function initAdmin() {
-            const { ref, onValue } = window.dbRef;
+        // Вычисление ссылки игрока и генерация QR-кода
+        function generatePlayerQRCode() {
+            let playerUrl = window.location.href.split('?')[0].split('#')[0];
             
-            // Загрузка вопросов из Firebase
-            onValue(ref(window.db, 'quiz/questions'), (snapshot) => {
+            // Если открыто как admin.html -> меняем на index.html
+            if (playerUrl.endsWith('admin.html')) {
+                playerUrl = playerUrl.replace('admin.html', 'index.html');
+            } else if (!playerUrl.endsWith('index.html')) {
+                // Если адрес без имени файла (например, https://site.ru/folder/)
+                playerUrl = playerUrl.replace(/\/$/, '') + '/index.html';
+            }
+
+            document.getElementById('player-link-display').innerText = playerUrl;
+
+            // Генерация QR-кода на холсте Canvas
+            if (window.QRCode) {
+                QRCode.toCanvas(document.getElementById('qrcode-canvas'), playerUrl, { width: 200, margin: 1 }, function (error) {
+                    if (error) console.error("Ошибка генерации QR:", error);
+                });
+            }
+        }
+
+        function initAdmin() {
+            const { ref, onValue } = window.quizRef;
+            
+            // 1. Слушаем вопросы из Firebase
+            onValue(ref(window.quizDB, 'quiz/questions'), (snapshot) => {
                 const data = snapshot.val();
                 questionsList = data ? Object.values(data) : [];
                 document.getElementById('q-count').innerText = questionsList.length;
                 
                 const listEl = document.getElementById('admin-questions-list');
                 listEl.innerHTML = '';
+                
                 if (questionsList.length === 0) {
-                    listEl.innerHTML = '<span class="text-slate-500">Пока нет вопросов...</span>';
+                    listEl.innerHTML = '<span class="text-slate-500">Вопросы пока не добавлены...</span>';
                     document.getElementById('start-btn').classList.add('hidden');
                     return;
                 }
 
                 questionsList.forEach((q, idx) => {
-                    listEl.innerHTML += `<div class="p-2.5 bg-slate-900 rounded-xl border border-slate-800"><b>${idx+1}.</b> ${q.text}</div>`;
+                    listEl.innerHTML += `
+                        <div class="p-3 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-start gap-2">
+                            <div>
+                                <b class="text-indigo-400">${idx+1}.</b> ${q.text}
+                                <div class="text-[11px] text-slate-400 mt-1">Ответ: <span class="text-emerald-400">${q.options[q.correct]}</span></div>
+                            </div>
+                        </div>`;
                 });
                 document.getElementById('start-btn').classList.remove('hidden');
             });
 
-            // Таблица лидеров
-            onValue(ref(window.db, 'quiz/teams'), (snapshot) => {
+            // 2. Слушаем таблицу лидеров
+            onValue(ref(window.quizDB, 'quiz/teams'), (snapshot) => {
                 const teams = snapshot.val();
                 const lbEl = document.getElementById('admin-leaderboard');
                 lbEl.innerHTML = '';
                 if (!teams) {
-                    lbEl.innerHTML = '<span class="text-xs text-slate-500">Ожидание команд...</span>';
+                    lbEl.innerHTML = '<span class="text-xs text-slate-500">Ожидание подключенных команд...</span>';
                     return;
                 }
                 const sorted = Object.entries(teams).sort((a,b) => b[1].score - a[1].score);
                 sorted.forEach(([name, data], idx) => {
                     lbEl.innerHTML += `
-                        <div class="flex justify-between items-center bg-slate-800 p-2.5 rounded-lg text-sm border border-slate-700/50">
-                            <span>#${idx+1} <b>${name}</b></span>
-                            <span class="text-indigo-400 font-bold">${data.score} б.</span>
+                        <div class="flex justify-between items-center bg-slate-800 p-3 rounded-xl text-sm border border-slate-700/50">
+                            <span class="font-medium">#${idx+1} <strong class="text-white ml-2">${name}</strong></span>
+                            <span class="bg-indigo-950 text-indigo-300 font-bold px-3 py-1 rounded-lg text-xs">${data.score} б.</span>
                         </div>`;
                 });
             });
 
-            // Статус игры
-            onValue(ref(window.db, 'quiz/state'), (snapshot) => {
+            // 3. Слушаем состояние игры
+            onValue(ref(window.quizDB, 'quiz/state'), (snapshot) => {
                 const state = snapshot.val() || { status: 'waiting', currentQuestion: 0 };
+                const statusText = document.getElementById('admin-status-text');
+
                 if (state.status === 'playing') {
+                    statusText.innerText = "Статус: ИДЕТ ИГРА";
+                    statusText.className = "text-xs text-emerald-400 font-bold";
                     document.getElementById('admin-control-section').classList.remove('hidden');
                     if (questionsList[state.currentQuestion]) {
                         document.getElementById('current-q-index').innerText = state.currentQuestion + 1;
                         document.getElementById('admin-current-q-text').innerText = questionsList[state.currentQuestion].text;
                     }
                 } else if (state.status === 'finished') {
-                    document.getElementById('admin-game-status').innerText = 'Игра завершена';
-                    document.getElementById('admin-current-q-text').innerText = "🏆 Викторина завершена!";
+                    statusText.innerText = "Статус: ИГРА ЗАВЕРШЕНА";
+                    statusText.className = "text-xs text-indigo-400 font-bold";
+                    document.getElementById('admin-current-q-text').innerText = "🏆 Викторина завершена! Победители доступны во вкладке «Таблица лидеров».";
+                } else {
+                    statusText.innerText = "Статус: Ожидание";
+                    statusText.className = "text-xs text-slate-400";
+                    document.getElementById('admin-control-section').classList.add('hidden');
                 }
             });
         }
 
-        function addQuestion() {
+        // Функция добавления вопроса
+        window.addQuestion = function() {
             const text = document.getElementById('q-text').value.trim();
             const options = [
                 document.getElementById('q-opt1').value.trim(),
@@ -217,46 +283,47 @@
             const correct = parseInt(document.getElementById('q-correct').value);
 
             if (!text || options.some(o => !o)) {
-                alert('Заполните текст вопроса и все 4 варианта ответов!');
+                alert('Пожалуйста, заполните сам вопрос и все 4 варианта ответов!');
                 return;
             }
 
-            const { ref, push, set } = window.dbRef;
-            const newQRef = push(ref(window.db, 'quiz/questions'));
+            const { ref, push, set } = window.quizRef;
+            const newQRef = push(ref(window.quizDB, 'quiz/questions'));
+            
             set(newQRef, { text, options, correct }).then(() => {
-                // Очистка полей ввода
+                // Очистка полей после успешной записи в Firebase
                 document.getElementById('q-text').value = '';
                 document.getElementById('q-opt1').value = '';
                 document.getElementById('q-opt2').value = '';
                 document.getElementById('q-opt3').value = '';
                 document.getElementById('q-opt4').value = '';
-            });
-        }
+            }).catch(err => alert("Ошибка записи в базу: " + err.message));
+        };
 
-        function startQuiz() {
-            const { ref, set } = window.dbRef;
-            set(ref(window.db, 'quiz/state'), { status: 'playing', currentQuestion: 0, startTime: Date.now() });
-        }
+        window.startQuiz = function() {
+            const { ref, set } = window.quizRef;
+            set(ref(window.quizDB, 'quiz/state'), { status: 'playing', currentQuestion: 0, startTime: Date.now() });
+        };
 
-        function nextQuestion() {
-            const { ref, get, set } = window.dbRef;
-            get(ref(window.db, 'quiz/state')).then((snapshot) => {
+        window.nextQuestion = function() {
+            const { ref, get, set } = window.quizRef;
+            get(ref(window.quizDB, 'quiz/state')).then((snapshot) => {
                 const state = snapshot.val();
                 const nextIdx = state.currentQuestion + 1;
                 if (nextIdx < questionsList.length) {
-                    set(ref(window.db, 'quiz/state'), { status: 'playing', currentQuestion: nextIdx, startTime: Date.now() });
+                    set(ref(window.quizDB, 'quiz/state'), { status: 'playing', currentQuestion: nextIdx, startTime: Date.now() });
                 } else {
-                    set(ref(window.db, 'quiz/state'), { status: 'finished', currentQuestion: state.currentQuestion });
+                    set(ref(window.quizDB, 'quiz/state'), { status: 'finished', currentQuestion: state.currentQuestion });
                 }
             });
-        }
+        };
 
-        function resetGame() {
-            if (confirm('Сбросить игру, вопросы и все команды?')) {
-                const { ref, remove } = window.dbRef;
-                remove(ref(window.db, 'quiz')).then(() => location.reload());
+        window.resetGame = function() {
+            if (confirm('Сбросить игру, включая удаление всех вопросов и результатов команд?')) {
+                const { ref, remove } = window.quizRef;
+                remove(ref(window.quizDB, 'quiz')).then(() => location.reload());
             }
-        }
+        };
     </script>
 </body>
 </html>
