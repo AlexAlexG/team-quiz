@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Админ-панель ведущего — Квиз</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Генератор QR-кодов -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -137,23 +135,26 @@
         </div>
 
         <!-- ВКЛАДКА 2: QR КОД ДЛЯ КОМАНД -->
+           <!-- ВКЛАДКА 2: QR КОД ДЛЯ КОМАНД -->
         <div id="tab-content-qrcode" class="hidden bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl text-center space-y-4">
             <h2 class="font-bold text-lg text-slate-200">Подключение игроков</h2>
             <p class="text-xs text-slate-400">Покажите этот QR-код участникам для входа в викторину:</p>
             
             <div class="flex justify-center my-4">
                 <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block">
-                    <canvas id="qrcode-canvas"></canvas>
+                    <!-- Используем обычную картинку, которая всегда стабильно отображается -->
+                    <img src="qr.png" alt="QR код для игры" class="w-48 h-48 object-contain">
                 </div>
             </div>
 
             <div class="space-y-1">
                 <p class="text-xs text-slate-400">Прямая ссылка для команд:</p>
-                <div class="text-sm text-emerald-400 font-mono bg-slate-900 p-3 rounded-xl border border-slate-700 break-all select-all font-semibold" id="player-link-display">
+                <div class="text-sm text-emerald-400 font-mono bg-slate-900 p-3 rounded-xl border border-slate-700 break-all select-all font-semibold">
                     https://alexalexg.github.io/team-quiz/index.html
                 </div>
             </div>
         </div>
+
 
         <!-- ВКЛАДКА 3: ТАБЛИЦА ЛИДЕРОВ -->
         <div id="tab-content-leaderboard" class="hidden bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl space-y-4">
